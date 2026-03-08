@@ -18,12 +18,7 @@ JWT_EXPIRY_HOURS = 24
 # ---------------------------------------------------------------------------
 
 def get_db():
-    client = MongoClient(
-        MONGO_URI,
-        serverSelectionTimeoutMS=5000,  # 5 second timeout
-        connectTimeoutMS=5000,
-        socketTimeoutMS=5000
-    )
+    client = MongoClient(MONGO_URI)
     return client["moviesDB"]
 
 
@@ -78,19 +73,12 @@ def check_username(request):
     if not username:
         return JsonResponse({"error": "'username' query parameter is required."}, status=400)
 
-    try:
-        db = get_db()
-        user = db["users"].find_one({"username": username}, {"_id": 0, "username": 1})
+    db = get_db()
+    user = db["users"].find_one({"username": username}, {"_id": 0, "username": 1})
 
-        if user:
-            return JsonResponse({"exists": True, "username": username})
-        return JsonResponse({"exists": False, "username": username})
-    except Exception as e:
-        # Log the error for debugging
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.error(f"Database error in check_username: {str(e)}")
-        return JsonResponse({"error": "Database connection failed. Please try again later."}, status=500)
+    if user:
+        return JsonResponse({"exists": True, "username": username})
+    return JsonResponse({"exists": False, "username": username})
 
 
 # ---------------------------------------------------------------------------
@@ -106,18 +94,12 @@ def check_email(request):
     if not email:
         return JsonResponse({"error": "'email' query parameter is required."}, status=400)
 
-    try:
-        db = get_db()
-        user = db["users"].find_one({"email": email}, {"_id": 0, "email": 1})
+    db = get_db()
+    user = db["users"].find_one({"email": email}, {"_id": 0, "email": 1})
 
-        if user:
-            return JsonResponse({"exists": True, "email": email})
-        return JsonResponse({"exists": False, "email": email})
-    except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.error(f"Database error in check_email: {str(e)}")
-        return JsonResponse({"error": "Database connection failed. Please try again later."}, status=500)
+    if user:
+        return JsonResponse({"exists": True, "email": email})
+    return JsonResponse({"exists": False, "email": email})
 
 
 # ---------------------------------------------------------------------------
