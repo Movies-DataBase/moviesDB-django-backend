@@ -28,6 +28,9 @@ DEBUG = False
 ALLOWED_HOSTS = ['yashlikescode.pythonanywhere.com', 'localhost', '127.0.0.1']
 
 # Frontend dev origins allowed to call this API from browser apps.
+CORS_ALLOW_ALL_ORIGINS = True
+
+# Retained as fallback if CORS_ALLOW_ALL_ORIGINS is turned off.
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
