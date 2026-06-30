@@ -25,17 +25,22 @@ SECRET_KEY = 'django-insecure-ew#5z8c$3tq!o%12q3&w+tvp8x7n$j4m01xz#l38r@q#8v@_#7
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ['yashlikescode.pythonanywhere.com', 'localhost', '127.0.0.1']
+ALLOWED_HOSTS = [
+    'django-backend-vl0a.onrender.com', # Your Render backend domain (note the leading dot for subdomains)
+    'localhost',
+    '127.0.0.1',
+    # Add any other domains your backend might be accessed from (e.g., custom domains)
+]
 
 # Frontend dev origins allowed to call this API from browser apps.
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = False
 
 # Retained as fallback if CORS_ALLOW_ALL_ORIGINS is turned off.
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    'https://react-ymoviesdb.vercel.app',
-    'https://ymoviesdb.vercel.app',
+    'http://localhost:5173', # For local development
+    'http://127.0.0.1:5173', # For local development
+    'https://ymoviesdb.vercel.app', # Your Vercel frontend domain
+    'https://www.your-custom-frontend-domain.com', # If you have a custom domain for your Vercel app
 ]
 
 
