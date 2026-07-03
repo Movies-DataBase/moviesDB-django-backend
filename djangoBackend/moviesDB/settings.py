@@ -39,6 +39,10 @@ CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173', # For local development
     'http://127.0.0.1:5173', # For local development
+    '49.43.25.62', # For local development
+    'http://49.43.25.62', # For local development
+    'https://49.43.25.62', # For local development
+
     'https://ymoviesdb.vercel.app', # Your Vercel frontend domain
     'https://www.your-custom-frontend-domain.com', # If you have a custom domain for your Vercel app
 ]
