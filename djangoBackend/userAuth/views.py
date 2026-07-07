@@ -34,6 +34,8 @@ JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-jwt-key-change-in-produc
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRY_HOURS = int(os.getenv("JWT_EXPIRY_HOURS", "24"))
 
+print(f"Loaded environment variables: MONGO_URI={MONGO_URI}, JWT_SECRET={'*' * len(JWT_SECRET)}, JWT_ALGORITHM={JWT_ALGORITHM}, JWT_EXPIRY_HOURS={JWT_EXPIRY_HOURS}")
+
 
 # ---------------------------------------------------------------------------
 # Helpers
