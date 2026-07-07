@@ -1,5 +1,7 @@
 import json
+import os
 import datetime
+from pathlib import Path
 
 import bcrypt
 import jwt
@@ -7,10 +9,30 @@ from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from pymongo import MongoClient
 
-MONGO_URI = "mongodb+srv://kmryashasvi:HNwEAUJcN5bIqBz5@cluster0.mbqehzd.mongodb.net/"
-JWT_SECRET = "your-super-secret-jwt-key-change-in-production"
-JWT_ALGORITHM = "HS256"
-JWT_EXPIRY_HOURS = 24
+ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+
+
+def _load_env():
+    if not ENV_FILE.exists():
+        return
+
+    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(key, value)
+
+
+_load_env()
+
+MONGO_URI = os.getenv("MONGO_URI", "")
+JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-jwt-key-change-in-production")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+JWT_EXPIRY_HOURS = int(os.getenv("JWT_EXPIRY_HOURS", "24"))
 
 
 # ---------------------------------------------------------------------------
