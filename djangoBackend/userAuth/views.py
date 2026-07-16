@@ -2,6 +2,7 @@ import json
 import os
 import datetime
 from pathlib import Path
+import resend
 
 import bcrypt
 import jwt
@@ -32,6 +33,7 @@ _load_env()
 MONGO_URI = os.getenv("MONGO_URI", "")
 JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-jwt-key-change-in-production")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+resend.api_key = os.getenv("RESEND_API_KEY", "")
 JWT_EXPIRY_HOURS = int(os.getenv("JWT_EXPIRY_HOURS", "24"))
 
 print(f"Loaded environment variables: MONGO_URI={MONGO_URI}, JWT_SECRET={'*' * len(JWT_SECRET)}, JWT_ALGORITHM={JWT_ALGORITHM}, JWT_EXPIRY_HOURS={JWT_EXPIRY_HOURS}")
@@ -40,6 +42,21 @@ print(f"Loaded environment variables: MONGO_URI={MONGO_URI}, JWT_SECRET={'*' * l
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+def create_otp():
+    """Generate a 6-digit OTP."""
+    return str(os.urandom(3).hex())[:6]  # Simple random hex, can be improved
+
+def send_email_otp(to_email, otp):
+    """Send OTP via email."""
+    try:
+        resend.Emails.send({
+            "from": "no-reply-moviesDB@yasv.win",
+            "to": to_email,
+            "subject": "MoviesDB OTP Verification",
+            "html": f"<p>Your OTP code is: <strong>{otp}</strong></p>"
+        })
+    except Exception as e:
+        print(f"Error sending email: {e}")
 
 def get_db():
     client = MongoClient(MONGO_URI)
@@ -129,10 +146,36 @@ def check_email(request):
 # ---------------------------------------------------------------------------
 # 3. Signup
 # ---------------------------------------------------------------------------
+otp = ''
+
+@csrf_exempt
+def send_otp(request):
+    """POST /userAuth/send-otp/"""
+    global otp
+
+    if request.method != "POST":
+        return JsonResponse({"error": "Only POST method is allowed."}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON body."}, status=400)
+
+    email = data.get("email", "").strip().lower()
+    if not email:
+        return JsonResponse({"error": "'email' field is required in the request body."}, status=400)
+
+    otp = create_otp()
+    send_email_otp(email, otp)  # Send OTP via email
+
+    return JsonResponse({"message": f"OTP sent to {email}", "otp": "secret hai, yaha nahi milega"})
+
 
 @csrf_exempt
 def signup(request):
     """POST /userAuth/signup/"""
+    global otp
+
     if request.method != "POST":
         return JsonResponse({"error": "Only POST method is allowed."}, status=405)
 
@@ -144,6 +187,13 @@ def signup(request):
     username = data.get("username", "").strip()
     email = data.get("email", "").strip().lower()
     password = data.get("password", "")
+    user_otp = data.get("otp", "").strip()
+
+    print(otp)
+    print(user_otp)
+
+    if user_otp != otp:
+        return JsonResponse({"error": "Invalid OTP."}, status=400)
 
     if not username or not email or not password:
         return JsonResponse({"error": "username, email, and password are required."}, status=400)
