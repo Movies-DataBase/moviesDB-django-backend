@@ -10,6 +10,8 @@ from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from pymongo import MongoClient
 
+from redis import Redis
+
 ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
@@ -35,13 +37,49 @@ JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-jwt-key-change-in-produc
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 resend.api_key = os.getenv("RESEND_API_KEY", "")
 JWT_EXPIRY_HOURS = int(os.getenv("JWT_EXPIRY_HOURS", "24"))
+RENDER_REDIS_URL = os.getenv("RENDER_REDIS_URL", "")
 
-print(f"Loaded environment variables: MONGO_URI={MONGO_URI}, JWT_SECRET={'*' * len(JWT_SECRET)}, JWT_ALGORITHM={JWT_ALGORITHM}, JWT_EXPIRY_HOURS={JWT_EXPIRY_HOURS}")
+redis_client = Redis.from_url(
+    RENDER_REDIS_URL,  # Your Render Redis URL
+    decode_responses=True    # Returns strings instead of bytes
+)
 
+OTP_EXPIRY_SECONDS = 180  # 3 minutes
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+def store_otp(identifier: str, otp: str) -> None:
+    """
+    identifier: email, phone number, or user id
+    otp: generated OTP
+    """
+    key = f"otp:{identifier}"
+    try:
+        redis_client.set(
+            key,
+            otp,
+            ex=OTP_EXPIRY_SECONDS
+        )
+    except Exception as e:
+        print(f"Error storing OTP in Redis: {e}")
+
+def verify_otp(identifier: str, entered_otp: str) -> bool:
+    key = f"otp:{identifier}"
+
+    stored_otp = redis_client.get(key)
+
+    if stored_otp is None:
+        return False  # Expired or doesn't exist
+
+    if stored_otp != entered_otp:
+        return False  # Wrong OTP
+
+    # OTP is correct → prevent reuse
+    redis_client.delete(key)
+
+    return True
+
 def create_otp():
     """Generate a 6-digit OTP."""
     return str(os.urandom(3).hex())[:6]  # Simple random hex, can be improved
@@ -146,12 +184,10 @@ def check_email(request):
 # ---------------------------------------------------------------------------
 # 3. Signup
 # ---------------------------------------------------------------------------
-otp = ''
 
 @csrf_exempt
 def send_otp(request):
     """POST /userAuth/send-otp/"""
-    global otp
 
     if request.method != "POST":
         return JsonResponse({"error": "Only POST method is allowed."}, status=405)
@@ -166,8 +202,14 @@ def send_otp(request):
         return JsonResponse({"error": "'email' field is required in the request body."}, status=400)
 
     otp = create_otp()
-    send_email_otp(email, otp)  # Send OTP via email
 
+    # Send OTP via email
+    send_email_otp(email, otp)
+
+    # Store OTP in Redis with expiry 
+    store_otp(email, otp)
+
+    print(f"Generated OTP for {email}: {otp}")  # For debugging; remove in production
     return JsonResponse({"message": f"OTP sent to {email}", "otp": "secret hai, yaha nahi milega"})
 
 
@@ -192,7 +234,7 @@ def signup(request):
     print(otp)
     print(user_otp)
 
-    if user_otp != otp:
+    if not verify_otp(email, user_otp):
         return JsonResponse({"error": "Invalid OTP."}, status=400)
 
     if not username or not email or not password:
