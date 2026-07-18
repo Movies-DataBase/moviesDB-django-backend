@@ -96,7 +96,7 @@ def send_email_otp(to_email, otp):
     except Exception as e:
         print(f"Error sending email: {e}")
 
-def get_db():
+def get_mongo_db():
     client = MongoClient(MONGO_URI)
     return client["moviesDB"]
 
@@ -111,7 +111,7 @@ def _get_token_from_header(request):
 
 def _decode_token(token):
     """Decode and validate JWT. Returns payload or raises jwt.PyJWTError."""
-    db = get_db()
+    db = get_mongo_db()
     if db["token_blacklist"].find_one({"token": token}):
         raise jwt.InvalidTokenError("Token has been logged out.")
     return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
@@ -152,7 +152,7 @@ def check_username(request):
     if not username:
         return JsonResponse({"error": "'username' query parameter is required."}, status=400)
 
-    db = get_db()
+    db = get_mongo_db()
     user = db["users"].find_one({"username": username}, {"_id": 0, "username": 1})
 
     if user:
@@ -173,7 +173,7 @@ def check_email(request):
     if not email:
         return JsonResponse({"error": "'email' query parameter is required."}, status=400)
 
-    db = get_db()
+    db = get_mongo_db()
     user = db["users"].find_one({"email": email}, {"_id": 0, "email": 1})
 
     if user:
@@ -198,8 +198,19 @@ def send_otp(request):
         return JsonResponse({"error": "Invalid JSON body."}, status=400)
 
     email = data.get("email", "").strip().lower()
+    username = data.get("username", "").strip()
+
+    db = get_mongo_db()
+
     if not email:
-        return JsonResponse({"error": "'email' field is required in the request body."}, status=400)
+        if not username:
+            return JsonResponse({"error": "'email' or 'username' field is required in the request body."}, status=400)
+
+        user = db["users"].find_one({"username": username}, {"_id": 0, "email": 1})
+        if not user or not user.get("email"):
+            return JsonResponse({"error": "User not found or has no registered email."}, status=404)
+
+        email = user["email"].strip().lower()
 
     otp = create_otp()
 
@@ -216,7 +227,6 @@ def send_otp(request):
 @csrf_exempt
 def signup(request):
     """POST /userAuth/signup/"""
-    global otp
 
     if request.method != "POST":
         return JsonResponse({"error": "Only POST method is allowed."}, status=405)
@@ -231,16 +241,13 @@ def signup(request):
     password = data.get("password", "")
     user_otp = data.get("otp", "").strip()
 
-    print(otp)
-    print(user_otp)
-
     if not verify_otp(email, user_otp):
         return JsonResponse({"error": "Invalid OTP."}, status=400)
 
     if not username or not email or not password:
         return JsonResponse({"error": "username, email, and password are required."}, status=400)
 
-    db = get_db()
+    db = get_mongo_db()
 
     if db["users"].find_one({"username": username}):
         return JsonResponse({"error": "Username already taken."}, status=409)
@@ -280,28 +287,27 @@ def login(request):
         data = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON body."}, status=400)
+    # OTP login using username + otp
+    user_otp = data.get("otp")
+    if not user_otp:
+        return JsonResponse({"error": "Invalid or expired OTP."}, status=401)
 
     username = data.get("username", "").strip()
-    password = data.get("password", "")
+    if not username:
+        return JsonResponse({"error": "username is required for OTP login."}, status=400)
 
-    if not username or not password:
-        return JsonResponse({"error": "username and password are required."}, status=400)
-
-    db = get_db()
+    db = get_mongo_db()
     user = db["users"].find_one({"username": username})
-
     if not user:
-        return JsonResponse({"error": "Invalid username or password."}, status=401)
+        return JsonResponse({"error": "User not found."}, status=404)
 
-    stored_pw = user["password"]
-    # Support both bcrypt-hashed and plain-text legacy passwords
-    if stored_pw.startswith("$2b$") or stored_pw.startswith("$2a$"):
-        match = bcrypt.checkpw(password.encode(), stored_pw.encode())
-    else:
-        match = (password == stored_pw)
+    # OTPs are stored by email; map username -> email for verification
+    email = user.get("email", "").strip().lower()
+    if not email:
+        return JsonResponse({"error": "User has no email on record; cannot verify OTP."}, status=400)
 
-    if not match:
-        return JsonResponse({"error": "Invalid username or password."}, status=401)
+    if not verify_otp(email, str(user_otp).strip()):
+        return JsonResponse({"error": "Invalid or expired OTP."}, status=401)
 
     payload = {
         "user_id": str(user["_id"]),
@@ -341,7 +347,7 @@ def logout(request):
     except jwt.PyJWTError as e:
         return JsonResponse({"error": str(e)}, status=401)
 
-    db = get_db()
+    db = get_mongo_db()
     db["token_blacklist"].insert_one({
         "token": token,
         "expired_at": datetime.datetime.utcfromtimestamp(payload["exp"]).isoformat(),
@@ -363,7 +369,7 @@ def get_profile(request):
     if err:
         return err
 
-    db = get_db()
+    db = get_mongo_db()
     user = db["users"].find_one({"username": payload["username"]}, {"_id": 0, "password": 0})
 
     if not user:
@@ -397,7 +403,7 @@ def update_profile(request):
     if not updates:
         return JsonResponse({"error": "No valid fields provided to update."}, status=400)
 
-    db = get_db()
+    db = get_mongo_db()
 
     if "username" in updates and updates["username"] != payload["username"]:
         if db["users"].find_one({"username": updates["username"]}):
@@ -438,7 +444,7 @@ def change_password(request):
     if not old_password or not new_password:
         return JsonResponse({"error": "old_password and new_password are required."}, status=400)
 
-    db = get_db()
+    db = get_mongo_db()
     user = db["users"].find_one({"username": payload["username"]})
 
     if not user:
